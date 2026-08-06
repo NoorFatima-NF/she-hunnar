@@ -1,0 +1,6 @@
+{
+  "name": "She Hunnar",
+  "description": "A premium multi-vendor handmade jewelry marketplace connecting independent artisans with customers, featuring custom orders, shop storefronts, seller onboarding, seller dashboard, and admin moderation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
