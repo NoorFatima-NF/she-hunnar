@@ -40,6 +40,13 @@ export interface SellerProfile {
   completedOrders: number;
   verificationStatus: 'pending' | 'approved' | 'rejected' | 'suspended';
   verificationDocsUploaded?: boolean;
+  sellerType?: 'individual' | 'business';
+  cnicNumber?: string;
+  cnicName?: string;
+  cnicFrontUrl?: string;
+  cnicBackUrl?: string;
+  bankTitle?: string;
+  pickupAddress?: string;
   commissionRate: number; // e.g. 10 = 10%
   shippingFee: number; // PKR
   freeShippingThreshold?: number; // PKR
