@@ -83,7 +83,7 @@ export const BecomeSellerPage: React.FC<BecomeSellerPageProps> = ({ onNavigate }
 
   const handleSendOtp = () => {
     if (!phone.trim() || phone.length < 10) {
-      setErrorMsg('Please enter a valid Pakistani mobile number (+92 3XX XXXXXXX).');
+      setErrorMsg('Please enter a valid mobile contact number (e.g. +92 300 1234567).');
       return;
     }
     setErrorMsg(null);
@@ -230,7 +230,7 @@ export const BecomeSellerPage: React.FC<BecomeSellerPageProps> = ({ onNavigate }
         <div className="relative z-10 space-y-3">
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 bg-amber-400 text-amber-950 text-[10px] font-extrabold uppercase tracking-widest rounded-md shadow-xs">
-              Daraz Style Onboarding
+              Merchant Onboarding
             </span>
             <span className="text-xs text-amber-200/80 font-medium">100% Verified Seller Portal</span>
           </div>
@@ -385,7 +385,7 @@ export const BecomeSellerPage: React.FC<BecomeSellerPageProps> = ({ onNavigate }
 
             {/* Mobile Number & Phone OTP Verification */}
             <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl space-y-3 text-xs">
-              <label className="font-bold text-stone-900 block">Pakistani Mobile Number (SMS Verification) *</label>
+              <label className="font-bold text-stone-900 block">Mobile Contact Number (SMS Verification) *</label>
               <div className="flex flex-col sm:flex-row gap-2">
                 <div className="relative flex-1 flex items-center">
                   <Phone size={16} className="absolute left-3 text-stone-400" />
@@ -403,7 +403,7 @@ export const BecomeSellerPage: React.FC<BecomeSellerPageProps> = ({ onNavigate }
                   onClick={handleSendOtp}
                   className="px-5 py-2.5 bg-stone-900 hover:bg-stone-950 text-white font-bold rounded-xl transition-all shrink-0"
                 >
-                  {isOtpSent ? 'Resend SMS OTP' : 'Send Verification OTP'}
+                  {isOtpSent ? 'Resend Verification Code' : 'Send Verification Code'}
                 </button>
               </div>
 
@@ -426,7 +426,7 @@ export const BecomeSellerPage: React.FC<BecomeSellerPageProps> = ({ onNavigate }
                     }`}
                   >
                     {isOtpVerified ? <CheckCircle size={14} /> : null}
-                    <span>{isOtpVerified ? 'Phone Verified ✓' : 'Verify Code'}</span>
+                    <span>{isOtpVerified ? 'Contact Verified ✓' : 'Verify Code'}</span>
                   </button>
                 </div>
               )}
