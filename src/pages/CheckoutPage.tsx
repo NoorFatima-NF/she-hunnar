@@ -15,21 +15,31 @@ import {
   MapPin
 } from 'lucide-react';
 
+import { SafepayCheckoutModal } from '../components/common/SafepayCheckoutModal';
+
 interface CheckoutPageProps {
   onNavigate: (view: string, param?: string) => void;
 }
 
 export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
-  const { cart, currentUser, getCartGroupedBySeller, placeOrder } = useMarketplace();
+  const { cart, currentUser, getCartGroupedBySeller, placeOrder, updateOrderPaymentStatus } = useMarketplace();
 
   // Multi-step Checkout Step state (Step 1: Shipping -> Step 2: Payment -> Step 3: Review Order)
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
 
+  // Safepay Modal State
+  const [isSafepayModalOpen, setIsSafepayModalOpen] = useState(false);
+  const [safepaySessionData, setSafepaySessionData] = useState<{
+    orderId: string;
+    trackerToken: string;
+    checkoutUrl?: string;
+  } | null>(null);
+
   // Contact & Address
-  const defaultAddr = currentUser.addresses?.[0];
-  const [fullName, setFullName] = useState(defaultAddr?.fullName || currentUser.name);
-  const [email, setEmail] = useState(currentUser.email);
-  const [phone, setPhone] = useState(defaultAddr?.phone || currentUser.phone || '');
+  const defaultAddr = currentUser?.addresses?.[0];
+  const [fullName, setFullName] = useState(defaultAddr?.fullName || currentUser?.name || '');
+  const [email, setEmail] = useState(currentUser?.email || '');
+  const [phone, setPhone] = useState(defaultAddr?.phone || currentUser?.phone || '');
 
   const [addressLine, setAddressLine] = useState(defaultAddr?.addressLine || 'House 42-B, Street 12, Phase 5 DHA');
   const [city, setCity] = useState(defaultAddr?.city || 'Lahore');
@@ -41,6 +51,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
     'COD' | 'Bank Transfer' | 'Easypaisa' | 'JazzCash' | 'Online Card'
   >('COD');
   const [paymentProofUrl, setPaymentProofUrl] = useState('');
+  const [isProcessingSafepay, setIsProcessingSafepay] = useState(false);
 
   const [stepError, setStepError] = useState<string | null>(null);
 
@@ -74,10 +85,81 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleFinalPlaceOrder = () => {
+  const handleFinalPlaceOrder = async () => {
     if (!fullName || !phone || !addressLine || !city) {
       setCurrentStep(1);
       return;
+    }
+
+    // If Online Card (Safepay) is selected, initiate Safepay Hosted Checkout session
+    if (paymentMethod === 'Online Card') {
+      try {
+        setIsProcessingSafepay(true);
+        setStepError(null);
+
+        // Pre-create the master order in context
+        const createdOrder = placeOrder({
+          customerName: fullName,
+          customerEmail: email,
+          customerPhone: phone,
+          addressLine,
+          city,
+          province,
+          postalCode,
+          paymentMethod: 'Online Card',
+          paymentProofUrl: paymentProofUrl || undefined
+        });
+
+        const successRedirect = `${window.location.origin}/?payment=safepay_success&orderId=${encodeURIComponent(
+          createdOrder.id
+        )}`;
+        const cancelRedirect = `${window.location.origin}/?payment=safepay_cancel&orderId=${encodeURIComponent(
+          createdOrder.id
+        )}`;
+
+        // Request backend to initialize Safepay session with SAFEPAY_SECRET_KEY
+        const response = await fetch('/api/safepay/create-session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            orderId: createdOrder.id,
+            amount: grandTotal,
+            currency: 'PKR',
+            customer: {
+              name: fullName,
+              email,
+              phone
+            },
+            successUrl: successRedirect,
+            cancelUrl: cancelRedirect
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success || !data.token) {
+          throw new Error(data.error || 'Failed to initialize Safepay checkout session.');
+        }
+
+        // Open Safepay Hosted Checkout 3D Secure modal
+        setSafepaySessionData({
+          orderId: createdOrder.id,
+          trackerToken: data.token,
+          checkoutUrl: data.checkoutUrl
+        });
+        setIsProcessingSafepay(false);
+        setIsSafepayModalOpen(true);
+        return;
+      } catch (err: any) {
+        console.error('[CheckoutPage] Safepay checkout error:', err);
+        setIsProcessingSafepay(false);
+        setStepError(
+          err.message || 'Could not connect to Safepay gateway. Please try another payment method or try again.'
+        );
+        return;
+      }
     }
 
     const createdOrder = placeOrder({
@@ -293,6 +375,45 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
               </div>
 
               <div className="space-y-3 text-xs">
+                {/* Online Card / Safepay Hosted Checkout */}
+                <label
+                  className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+                    paymentMethod === 'Online Card'
+                      ? 'bg-amber-50/80 border-amber-800 ring-1 ring-amber-800/30'
+                      : 'bg-stone-50 border-stone-200 hover:border-stone-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="payment"
+                    checked={paymentMethod === 'Online Card'}
+                    onChange={() => setPaymentMethod('Online Card')}
+                    className="mt-1 text-amber-800"
+                  />
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center justify-between flex-wrap gap-1">
+                      <p className="font-bold text-stone-900 flex items-center gap-1.5 text-sm">
+                        <ShieldCheck size={16} className="text-emerald-700" />
+                        <span>Online Card (Safepay Hosted Checkout)</span>
+                      </p>
+                      <span className="bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-md text-[10px] tracking-wide uppercase">
+                        Safepay Sandbox
+                      </span>
+                    </div>
+                    <p className="text-stone-500 text-xs">
+                      Pay securely via official Safepay Hosted Checkout with 3D-Secure protection. Supports Visa, Mastercard, PayPak, and digital wallets.
+                    </p>
+                    <div className="pt-1 flex items-center gap-1.5 text-[10px] font-semibold text-stone-600">
+                      <span className="px-1.5 py-0.5 bg-white border border-stone-200 rounded">Visa</span>
+                      <span className="px-1.5 py-0.5 bg-white border border-stone-200 rounded">Mastercard</span>
+                      <span className="px-1.5 py-0.5 bg-white border border-stone-200 rounded">PayPak</span>
+                      <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded flex items-center gap-1">
+                        <ShieldCheck size={11} /> 100% Encrypted
+                      </span>
+                    </div>
+                  </div>
+                </label>
+
                 {/* COD */}
                 <label className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
                   paymentMethod === 'COD'
@@ -490,11 +611,26 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                 </button>
 
                 <button
+                  type="button"
+                  disabled={isProcessingSafepay}
                   onClick={handleFinalPlaceOrder}
-                  className="px-9 py-4 bg-amber-900 hover:bg-amber-950 text-white rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-xl transition-all active:scale-95"
+                  className="px-9 py-4 bg-amber-900 hover:bg-amber-950 disabled:bg-stone-400 text-white rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-xl transition-all active:scale-95 cursor-pointer disabled:cursor-not-allowed"
                 >
-                  <CheckCircle size={18} />
-                  <span>Confirm & Place Order Now</span>
+                  {isProcessingSafepay ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Connecting to Safepay...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle size={18} />
+                      <span>
+                        {paymentMethod === 'Online Card'
+                          ? 'Proceed to Safepay Checkout'
+                          : 'Confirm & Place Order Now'}
+                      </span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -546,6 +682,28 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
           </div>
         </div>
       </div>
+
+      {/* Safepay Hosted Checkout Modal */}
+      {safepaySessionData && (
+        <SafepayCheckoutModal
+          isOpen={isSafepayModalOpen}
+          orderId={safepaySessionData.orderId}
+          amount={grandTotal}
+          customerName={fullName}
+          customerEmail={email}
+          trackerToken={safepaySessionData.trackerToken}
+          checkoutUrl={safepaySessionData.checkoutUrl}
+          onSuccess={(data) => {
+            updateOrderPaymentStatus(data.orderId, 'Paid', {
+              tracker: data.tracker,
+              transactionRef: data.signature || data.tracker
+            });
+            setIsSafepayModalOpen(false);
+            onNavigate('order-confirmation', data.orderId);
+          }}
+          onCancel={() => setIsSafepayModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

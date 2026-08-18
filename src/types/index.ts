@@ -208,6 +208,10 @@ export interface MasterOrder {
   paymentMethod: 'COD' | 'Bank Transfer' | 'Easypaisa' | 'JazzCash' | 'Online Card';
   paymentStatus: 'Pending' | 'Paid' | 'Failed' | 'Refunded';
   paymentProofUrl?: string; // For manual bank transfer / easypaisa proof
+  safepayTracker?: string;
+  safepaySignature?: string;
+  transactionRef?: string;
+  paymentVerifiedAt?: string;
   totalItems: number;
   subtotal: number; // PKR
   discountAmount: number; // PKR

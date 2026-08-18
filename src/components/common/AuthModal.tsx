@@ -6,12 +6,12 @@ import { useGoogleLogin } from '@react-oauth/google';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialMode?: 'signin' | 'register';
+  initialMode?: 'signin' | 'register' | 'forgot';
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'signin' }) => {
-  const { loginUser, registerUser } = useMarketplace();
-  const [mode, setMode] = useState<'signin' | 'register'>(initialMode);
+  const { loginUser, registerUser, resetPassword } = useMarketplace();
+  const [mode, setMode] = useState<'signin' | 'register' | 'forgot'>(initialMode);
 
   // Form States
   const [name, setName] = useState('');
@@ -29,11 +29,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
         const userInfo = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
         }).then(res => res.json());
-        
-        const loginRes = loginUser(userInfo.email);
+
+        const loginRes = await loginUser(userInfo.email);
         if (!loginRes.success) {
-          // Auto register google user if not registered
-          registerUser(
+          await registerUser(
             userInfo.name || userInfo.email.split('@')[0],
             userInfo.email,
             '+92 300 0000000',
@@ -55,7 +54,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
 
   if (!isOpen) return null;
 
-  const handleSignInSubmit = (e: React.FormEvent) => {
+  const handleSignInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setAccountNotFound(false);
@@ -65,7 +64,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
       return;
     }
 
-    const result = loginUser(email, password);
+    const result = await loginUser(email, password);
     if (!result.success) {
       setErrorMessage(result.message);
       if (result.message.toLowerCase().includes('create an account') || result.message.toLowerCase().includes('not found')) {
@@ -81,7 +80,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
     }, 1200);
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setAccountNotFound(false);
@@ -91,7 +90,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
       return;
     }
 
-    const result = registerUser(name, email, phone, city, password);
+    const result = await registerUser(name, email, phone, city, password);
     if (!result.success) {
       setErrorMessage(result.message);
       return;
@@ -102,6 +101,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
       setSuccessMessage(null);
       onClose();
     }, 1200);
+  };
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+
+    if (!email.trim()) {
+      setErrorMessage('Please enter your email address.');
+      return;
+    }
+
+    const result = await resetPassword(email);
+    if (!result.success) {
+      setErrorMessage(result.message);
+      return;
+    }
+
+    setSuccessMessage(result.message);
+    setTimeout(() => {
+      setSuccessMessage(null);
+      setMode('signin');
+      setEmail('');
+      setPassword('');
+      setErrorMessage(null);
+    }, 2000);
   };
 
   return (
@@ -196,6 +220,46 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
             <CheckCircle size={36} className="mx-auto text-emerald-600 animate-bounce" />
             <p className="font-bold text-xs">{successMessage}</p>
           </div>
+        ) : mode === 'forgot' ? (
+          <form onSubmit={handleForgotPasswordSubmit} className="space-y-4 text-xs">
+            <div className="space-y-1">
+              <label className="font-bold text-stone-800 ml-1">Email Address *</label>
+              <div className="relative flex items-center">
+                <Mail size={16} className="absolute left-3 text-stone-400" />
+                <input
+                  type="email"
+                  required
+                  placeholder="Enter your account email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-stone-50/50 border border-stone-200 rounded-xl py-2.5 pl-9 pr-3 focus:outline-none focus:ring-4 focus:ring-amber-900/10 focus:border-amber-700 font-medium transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-3 text-[11px] text-amber-900">
+              We will send a password reset link to your email using Supabase Auth.
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-stone-900 hover:bg-stone-800 transition-colors text-white rounded-xl py-2.5 font-bold text-xs shadow-sm"
+            >
+              Send Reset Link
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMode('signin');
+                setErrorMessage(null);
+                setPassword('');
+              }}
+              className="w-full text-center text-xs font-semibold text-amber-900 hover:text-amber-700 transition-colors"
+            >
+              Back to Sign In
+            </button>
+          </form>
         ) : mode === 'signin' ? (
           /* SIGN IN FORM */
           <form onSubmit={handleSignInSubmit} className="space-y-4 text-xs">
@@ -227,6 +291,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
                   className="w-full bg-stone-50/50 border border-stone-200 rounded-xl py-2.5 pl-9 pr-3 focus:outline-none focus:ring-4 focus:ring-amber-900/10 focus:border-amber-700 font-medium transition-all tracking-widest placeholder:tracking-normal"
                 />
               </div>
+            </div>
+
+            <div className="flex items-center justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('forgot');
+                  setErrorMessage(null);
+                  setSuccessMessage(null);
+                  setAccountNotFound(false);
+                }}
+                className="text-[11px] font-bold text-amber-900 hover:text-amber-700 transition-colors"
+              >
+                Forgot password?
+              </button>
             </div>
 
             <button

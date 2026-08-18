@@ -48,24 +48,20 @@ export const BecomeSellerPage: React.FC<BecomeSellerPageProps> = ({ onNavigate }
   const [province, setProvince] = useState('Punjab');
   const [pickupAddress, setPickupAddress] = useState('');
   const [instagram, setInstagram] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [bannerUrl, setBannerUrl] = useState('');
 
   // Step 3: CNIC Identity Verification (Daraz Style)
   const [cnicName, setCnicName] = useState('');
   const [cnicNumber, setCnicNumber] = useState('');
-  const [cnicFrontUrl, setCnicFrontUrl] = useState(
-    'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80'
-  );
-  const [cnicBackUrl, setCnicBackUrl] = useState(
-    'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=600&q=80'
-  );
+  const [cnicFrontUrl, setCnicFrontUrl] = useState('');
+  const [cnicBackUrl, setCnicBackUrl] = useState('');
 
   // Step 4: Bank Account & Financial Info
   const [bankTitle, setBankTitle] = useState('');
   const [bankName, setBankName] = useState('Meezan Bank Ltd');
   const [accountNumber, setAccountNumber] = useState('');
-  const [chequeProofUrl, setChequeProofUrl] = useState(
-    'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80'
-  );
+  const [chequeProofUrl, setChequeProofUrl] = useState('');
 
   // Step 5: Shipping & Rules
   const [shippingFee, setShippingFee] = useState<number>(250);
@@ -74,12 +70,6 @@ export const BecomeSellerPage: React.FC<BecomeSellerPageProps> = ({ onNavigate }
 
   // Form Validation & Errors
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  // Brand Default Media
-  const defaultLogo =
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80';
-  const defaultBanner =
-    'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=1200&q=80';
 
   const handleSendOtp = () => {
     if (!phone.trim() || phone.length < 10) {
@@ -155,8 +145,8 @@ export const BecomeSellerPage: React.FC<BecomeSellerPageProps> = ({ onNavigate }
       specialization: `${primaryCategory} & Handmade Crafts`,
       about,
       location: fullLocation,
-      logo: defaultLogo,
-      banner: defaultBanner,
+      logo: logoUrl,
+      banner: bannerUrl,
       commissionRate: 10,
       shippingFee,
       freeShippingThreshold,
@@ -169,7 +159,7 @@ export const BecomeSellerPage: React.FC<BecomeSellerPageProps> = ({ onNavigate }
       cnicBackUrl,
       bankTitle,
       pickupAddress: `${pickupAddress}, ${locationCity}`,
-      socialLinks: { instagram }
+      socialLinks: { instagram, whatsapp: phone }
     });
 
     setIsSubmitted(true);
@@ -543,6 +533,71 @@ export const BecomeSellerPage: React.FC<BecomeSellerPageProps> = ({ onNavigate }
               />
             </div>
 
+            {/* Shop Logo & Banner Upload */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              {/* Logo Upload */}
+              <div className="space-y-2 p-3.5 bg-stone-50 border border-stone-200 rounded-2xl">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-stone-800">Shop Logo (Optional)</label>
+                  {logoUrl && (
+                    <button type="button" onClick={() => setLogoUrl('')} className="text-[10px] text-rose-600 hover:underline font-bold">Remove</button>
+                  )}
+                </div>
+                <div className="h-24 bg-white rounded-xl overflow-hidden border border-dashed border-stone-300 flex items-center justify-center">
+                  {logoUrl ? (
+                    <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                  ) : (
+                    <label htmlFor="shop-logo-input" className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-stone-400 hover:text-amber-800 transition-colors">
+                      <Upload size={20} className="mb-1" />
+                      <span className="text-[11px] font-bold text-stone-600">Upload shop logo</span>
+                      <span className="text-[9px] text-stone-400">Square image recommended</span>
+                    </label>
+                  )}
+                </div>
+                <input
+                  id="shop-logo-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) { const r = new FileReader(); r.onloadend = () => setLogoUrl(r.result as string); r.readAsDataURL(file); }
+                  }}
+                  className="hidden"
+                />
+              </div>
+
+              {/* Banner Upload */}
+              <div className="space-y-2 p-3.5 bg-stone-50 border border-stone-200 rounded-2xl">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-stone-800">Shop Banner (Optional)</label>
+                  {bannerUrl && (
+                    <button type="button" onClick={() => setBannerUrl('')} className="text-[10px] text-rose-600 hover:underline font-bold">Remove</button>
+                  )}
+                </div>
+                <div className="h-24 bg-white rounded-xl overflow-hidden border border-dashed border-stone-300 flex items-center justify-center">
+                  {bannerUrl ? (
+                    <img src={bannerUrl} alt="Banner" className="w-full h-full object-cover" />
+                  ) : (
+                    <label htmlFor="shop-banner-input" className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-stone-400 hover:text-amber-800 transition-colors">
+                      <Upload size={20} className="mb-1" />
+                      <span className="text-[11px] font-bold text-stone-600">Upload shop banner</span>
+                      <span className="text-[9px] text-stone-400">Wide/landscape image recommended</span>
+                    </label>
+                  )}
+                </div>
+                <input
+                  id="shop-banner-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) { const r = new FileReader(); r.onloadend = () => setBannerUrl(r.result as string); r.readAsDataURL(file); }
+                  }}
+                  className="hidden"
+                />
+              </div>
+            </div>
+
             <div className="flex justify-between pt-4 border-t border-stone-100">
               <button
                 type="button"
@@ -604,45 +659,83 @@ export const BecomeSellerPage: React.FC<BecomeSellerPageProps> = ({ onNavigate }
 
             {/* CNIC Document Image Upload Box */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="space-y-2 p-3 bg-stone-50 border border-stone-200 rounded-2xl">
-                <label className="font-bold text-stone-800 block">CNIC Front Photo Upload *</label>
+              <div className="space-y-2 p-3.5 bg-stone-50 border border-stone-200 rounded-2xl">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-stone-800 block">CNIC Front Photo *</label>
+                  {cnicFrontUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setCnicFrontUrl('')}
+                      className="text-[10px] text-rose-600 hover:underline font-bold"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
                 <div className="h-32 bg-white rounded-xl overflow-hidden border border-dashed border-stone-300 relative flex items-center justify-center">
                   {cnicFrontUrl ? (
                     <img src={cnicFrontUrl} alt="CNIC Front" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="text-center p-2 text-stone-400">
-                      <Upload size={24} className="mx-auto mb-1" />
-                      <span className="text-[10px]">Click to upload CNIC front</span>
-                    </div>
+                    <label htmlFor="cnic-front-input" className="text-center p-3 text-stone-400 cursor-pointer hover:text-amber-800 transition-colors w-full h-full flex flex-col items-center justify-center">
+                      <Upload size={22} className="mb-1 text-stone-400" />
+                      <span className="text-[11px] font-bold text-stone-600">Click to upload CNIC front</span>
+                      <span className="text-[9px] text-stone-400">JPG, PNG, WebP up to 5MB</span>
+                    </label>
                   )}
                 </div>
                 <input
-                  type="text"
-                  placeholder="Image URL"
-                  value={cnicFrontUrl}
-                  onChange={(e) => setCnicFrontUrl(e.target.value)}
-                  className="w-full text-[11px] bg-white border border-stone-200 rounded-lg p-1.5"
+                  id="cnic-front-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => setCnicFrontUrl(reader.result as string);
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="hidden"
                 />
               </div>
 
-              <div className="space-y-2 p-3 bg-stone-50 border border-stone-200 rounded-2xl">
-                <label className="font-bold text-stone-800 block">CNIC Back Photo Upload *</label>
+              <div className="space-y-2 p-3.5 bg-stone-50 border border-stone-200 rounded-2xl">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-stone-800 block">CNIC Back Photo *</label>
+                  {cnicBackUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setCnicBackUrl('')}
+                      className="text-[10px] text-rose-600 hover:underline font-bold"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
                 <div className="h-32 bg-white rounded-xl overflow-hidden border border-dashed border-stone-300 relative flex items-center justify-center">
                   {cnicBackUrl ? (
                     <img src={cnicBackUrl} alt="CNIC Back" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="text-center p-2 text-stone-400">
-                      <Upload size={24} className="mx-auto mb-1" />
-                      <span className="text-[10px]">Click to upload CNIC back</span>
-                    </div>
+                    <label htmlFor="cnic-back-input" className="text-center p-3 text-stone-400 cursor-pointer hover:text-amber-800 transition-colors w-full h-full flex flex-col items-center justify-center">
+                      <Upload size={22} className="mb-1 text-stone-400" />
+                      <span className="text-[11px] font-bold text-stone-600">Click to upload CNIC back</span>
+                      <span className="text-[9px] text-stone-400">JPG, PNG, WebP up to 5MB</span>
+                    </label>
                   )}
                 </div>
                 <input
-                  type="text"
-                  placeholder="Image URL"
-                  value={cnicBackUrl}
-                  onChange={(e) => setCnicBackUrl(e.target.value)}
-                  className="w-full text-[11px] bg-white border border-stone-200 rounded-lg p-1.5"
+                  id="cnic-back-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => setCnicBackUrl(reader.result as string);
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="hidden"
                 />
               </div>
             </div>
@@ -730,17 +823,43 @@ export const BecomeSellerPage: React.FC<BecomeSellerPageProps> = ({ onNavigate }
 
             {/* Upload Cheque / Bank Proof */}
             <div className="space-y-2 p-3.5 bg-stone-50 border border-stone-200 rounded-2xl text-xs">
-              <label className="font-bold text-stone-800 block">Bank Account Proof (Cancelled Cheque / Statement Screenshot) *</label>
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-stone-800 block">Bank Account Proof (Cancelled Cheque / Statement Screenshot) *</label>
+                {chequeProofUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setChequeProofUrl('')}
+                    className="text-[10px] text-rose-600 hover:underline font-bold"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
               <div className="h-28 bg-white rounded-xl overflow-hidden border border-dashed border-stone-300 flex items-center justify-center">
                 {chequeProofUrl ? (
                   <img src={chequeProofUrl} alt="Bank Proof" className="w-full h-full object-cover" />
                 ) : (
-                  <div className="text-center p-2 text-stone-400">
-                    <Upload size={20} className="mx-auto mb-1" />
-                    <span className="text-[10px]">Upload cheque photo</span>
-                  </div>
+                  <label htmlFor="bank-proof-input" className="text-center p-3 text-stone-400 cursor-pointer hover:text-amber-800 transition-colors w-full h-full flex flex-col items-center justify-center">
+                    <Upload size={20} className="mb-1 text-stone-400" />
+                    <span className="text-[11px] font-bold text-stone-600">Click to upload cheque / statement photo</span>
+                    <span className="text-[9px] text-stone-400">JPG, PNG, WebP up to 5MB</span>
+                  </label>
                 )}
               </div>
+              <input
+                id="bank-proof-input"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => setChequeProofUrl(reader.result as string);
+                    reader.readAsDataURL(file);
+                  }
+                }}
+                className="hidden"
+              />
             </div>
 
             <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl text-xs space-y-1 text-stone-700">

@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { isProductInCategory } from '../utils/categoryUtils';
+import { syncOrderToSupabase, syncPaymentStatusToSupabase } from '../services/supabaseOrderService';
+import { syncSellerToSupabase } from '../services/supabaseSellerService';
+import { syncCartToSupabase } from '../services/supabaseCartService';
+import { isSupabaseConfigured, supabase } from '../services/supabaseClient';
 import {
   UserRole,
   User,
@@ -86,8 +90,20 @@ interface MarketplaceContextType {
     postalCode: string;
     paymentMethod: 'COD' | 'Bank Transfer' | 'Easypaisa' | 'JazzCash' | 'Online Card';
     paymentProofUrl?: string;
+    safepayTracker?: string;
+    safepaySignature?: string;
     couponCode?: string;
   }) => MasterOrder;
+  updateOrderPaymentStatus: (
+    orderId: string,
+    paymentStatus: 'Paid' | 'Pending' | 'Failed' | 'Refunded',
+    transactionData?: {
+      tracker?: string;
+      signature?: string;
+      paidAt?: string;
+      transactionRef?: string;
+    }
+  ) => void;
   updateSellerOrderStatus: (sellerOrderId: string, status: OrderStatus, trackingNumber?: string, courierName?: string) => void;
 
   // Seller Management
@@ -123,9 +139,10 @@ interface MarketplaceContextType {
   toggleCouponActive: (code: string) => void;
 
   // User Authentication & Registration
-  loginUser: (email: string, password?: string) => { success: boolean; message: string };
-  registerUser: (name: string, email: string, phone: string, city: string, password?: string) => { success: boolean; message: string };
-  logoutUser: () => void;
+  loginUser: (email: string, password?: string) => Promise<{ success: boolean; message: string }>;
+  registerUser: (name: string, email: string, phone: string, city: string, password?: string) => Promise<{ success: boolean; message: string }>;
+  resetPassword: (email: string, newPassword?: string) => Promise<{ success: boolean; message: string }>;
+  logoutUser: () => Promise<void>;
 
   // Toast System
   toastMessage: string | null;
@@ -134,7 +151,7 @@ interface MarketplaceContextType {
 
 const MarketplaceContext = createContext<MarketplaceContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'zaveri_marketplace_state_v1';
+
 
 const sanitizeUniqueProducts = (items: Product[]): Product[] => {
   const seenIds = new Set<string>();
@@ -179,7 +196,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Load state from localStorage or fallback to initial defaults
   const [activeRole, setActiveRole] = useState<UserRole>('customer');
   const [activeSellerShopId, setActiveSellerShopId] = useState<string>('s-1'); // Default Noor Jewelry Studio
-
+const LOCAL_STORAGE_KEY = 'zaveri_marketplace_state_v1';
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [registeredUsers, setRegisteredUsers] = useState<User[]>(INITIAL_REGISTERED_USERS);
 
@@ -203,6 +220,8 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [selectedCategory, setSelectedCategory] = useState<JewelryCategory | 'All'>('All');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  const cartSessionToken = 'she-hunnar-guest-cart';
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -217,6 +236,8 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.currentUser) setCurrentUser(parsed.currentUser);
+        if (parsed.activeRole) setActiveRole(parsed.activeRole);
+        if (parsed.activeSellerShopId) setActiveSellerShopId(parsed.activeSellerShopId);
         if (parsed.registeredUsers && Array.isArray(parsed.registeredUsers)) {
           const demoEmails = new Set(INITIAL_REGISTERED_USERS.map((u) => u.email.toLowerCase()));
           const userDefined = parsed.registeredUsers.filter((u: User) => !demoEmails.has(u.email.toLowerCase()));
@@ -275,6 +296,8 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     try {
       const stateToSave = {
         currentUser,
+        activeRole,
+        activeSellerShopId,
         registeredUsers,
         sellers,
         products: sanitizeUniqueProducts(products),
@@ -296,6 +319,8 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   }, [
     currentUser,
+    activeRole,
+    activeSellerShopId,
     registeredUsers,
     sellers,
     products,
@@ -311,6 +336,18 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     platformCommission,
     announcementText
   ]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    const targetUserId = currentUser?.id ?? null;
+    const guestCartToken = !targetUserId ? cartSessionToken : null;
+
+    syncCartToSupabase(cart, {
+      currentUserId: targetUserId,
+      sessionToken: guestCartToken
+    });
+  }, [cart, currentUser?.id]);
 
   const currentSellerShop = sellers.find((s) => s.id === activeSellerShopId);
 
@@ -451,6 +488,8 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     postalCode: string;
     paymentMethod: 'COD' | 'Bank Transfer' | 'Easypaisa' | 'JazzCash' | 'Online Card';
     paymentProofUrl?: string;
+    safepayTracker?: string;
+    safepaySignature?: string;
     couponCode?: string;
   }): MasterOrder => {
     const grouped = getCartGroupedBySeller();
@@ -526,8 +565,12 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         postalCode: orderDetails.postalCode
       },
       paymentMethod: orderDetails.paymentMethod,
-      paymentStatus: orderDetails.paymentMethod === 'COD' ? 'Pending' : 'Paid',
+      paymentStatus: orderDetails.paymentMethod === 'COD' || orderDetails.paymentMethod === 'Online Card' ? 'Pending' : 'Paid',
       paymentProofUrl: orderDetails.paymentProofUrl,
+      safepayTracker: orderDetails.safepayTracker,
+      safepaySignature: orderDetails.safepaySignature,
+      transactionRef: orderDetails.safepayTracker,
+      paymentVerifiedAt: orderDetails.paymentMethod !== 'COD' && orderDetails.paymentMethod !== 'Online Card' ? new Date().toISOString() : undefined,
       totalItems: cart.reduce((acc, c) => acc + c.quantity, 0),
       subtotal,
       discountAmount,
@@ -600,6 +643,10 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
 
     clearCart();
+    
+    // Live sync to Supabase database master_orders table
+    syncOrderToSupabase(newMasterOrder);
+
     showToast(`Order #${masterOrderId} successfully placed! Thank you.`);
     return newMasterOrder;
   };
@@ -650,6 +697,42 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     showToast(`Order ${sellerOrderId} status updated to ${status}`);
   };
 
+  const updateOrderPaymentStatus = (
+    orderId: string,
+    paymentStatus: 'Paid' | 'Pending' | 'Failed' | 'Refunded',
+    transactionData?: {
+      tracker?: string;
+      signature?: string;
+      paidAt?: string;
+      transactionRef?: string;
+    }
+  ) => {
+    setOrders((prev) =>
+      prev.map((mo) => {
+        if (mo.id === orderId || mo.masterOrderId === orderId) {
+          return {
+            ...mo,
+            paymentStatus,
+            safepayTracker: transactionData?.tracker || mo.safepayTracker,
+            safepaySignature: transactionData?.signature || mo.safepaySignature,
+            transactionRef:
+              transactionData?.transactionRef || transactionData?.tracker || mo.transactionRef,
+            paymentVerifiedAt: transactionData?.paidAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return mo;
+      })
+    );
+
+    // Live sync payment update to Supabase
+    syncPaymentStatusToSupabase(orderId, paymentStatus, transactionData);
+
+    if (paymentStatus === 'Paid') {
+      showToast(`Safepay payment verified for Order #${orderId}`);
+    }
+  };
+
   // SELLER MANAGEMENT
   const submitSellerApplication = (
     appData: Omit<
@@ -671,6 +754,9 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
 
     setSellers((prev) => [newProfile, ...prev]);
+
+    // Live sync shop profile to Supabase `seller_profiles` table
+    syncSellerToSupabase(newProfile, currentUser);
 
     // Send admin notification
     setNotifications((prev) => [
@@ -839,11 +925,13 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const sendMessage = (sellerId: string, text: string) => {
     const seller = sellers.find((s) => s.id === sellerId);
+    const customerId = currentUser?.id || `c-guest-${Date.now()}`;
+    const customerName = currentUser?.name || 'Customer';
     const newMsg: DirectMessage = {
       id: `m-${Date.now()}`,
-      conversationId: `conv-${currentUser.id}-${sellerId}`,
-      customerId: currentUser.id,
-      customerName: currentUser.name,
+      conversationId: `conv-${customerId}-${sellerId}`,
+      customerId,
+      customerName,
       sellerId,
       sellerShopName: seller ? seller.shopName : 'Artisan',
       senderRole: activeRole === 'seller' ? 'seller' : 'customer',
@@ -922,8 +1010,49 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
   }, [products]);
 
-  const loginUser = (email: string, password?: string): { success: boolean; message: string } => {
+  const loginUser = async (email: string, password?: string): Promise<{ success: boolean; message: string }> => {
     const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail) {
+      return { success: false, message: 'Please provide your email address.' };
+    }
+
+    if (isSupabaseConfigured && password) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password
+        });
+
+        if (error) {
+          const message = error.message || 'Incorrect password. Please check your details and try again.';
+          return {
+            success: false,
+            message: message.includes('Invalid login credentials')
+              ? 'Incorrect password. Please check your details and try again.'
+              : message
+          };
+        }
+
+        const user = data.user;
+        const authUser: User = {
+          id: user?.id || `supabase-${Date.now()}`,
+          name: user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Customer',
+          email: user?.email || cleanEmail,
+          phone: user?.user_metadata?.phone || '',
+          role: 'customer',
+          addresses: [],
+          createdAt: user?.created_at ? new Date(user.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+        };
+
+        setCurrentUser(authUser);
+        showToast(`Welcome back, ${authUser.name}!`);
+        return { success: true, message: `Welcome back, ${authUser.name}!` };
+      } catch (error) {
+        console.error('Supabase sign-in failed:', error);
+      }
+    }
+
     const existingUser = registeredUsers.find((u) => u.email.trim().toLowerCase() === cleanEmail);
 
     if (!existingUser) {
@@ -948,16 +1077,81 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   };
 
-  const registerUser = (
+  const registerUser = async (
     name: string,
     email: string,
     phone: string,
     city: string,
     password?: string
-  ): { success: boolean; message: string } => {
+  ): Promise<{ success: boolean; message: string }> => {
     const cleanEmail = email.trim().toLowerCase();
-    const isAlreadyRegistered = registeredUsers.some((u) => u.email.trim().toLowerCase() === cleanEmail);
+    const trimmedName = name.trim();
+    const finalPassword = password?.trim() || 'password123';
 
+    if (!trimmedName || !cleanEmail || !phone.trim()) {
+      return {
+        success: false,
+        message: 'Please fill in all required fields to create your account.'
+      };
+    }
+
+    if (isSupabaseConfigured && finalPassword) {
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password: finalPassword,
+          options: {
+            data: {
+              full_name: trimmedName,
+              phone: phone.trim(),
+              city: city.trim() || 'Lahore'
+            }
+          }
+        });
+
+        if (error) {
+          return { success: false, message: error.message || 'Unable to create your account right now.' };
+        }
+
+        const user = data.user;
+        const newUser: User = {
+          id: user?.id || `c-${Date.now()}`,
+          name: trimmedName,
+          email: cleanEmail,
+          password: finalPassword,
+          phone: phone.trim(),
+          role: 'customer',
+          addresses: [
+            {
+              id: `addr-${Date.now()}`,
+              fullName: trimmedName,
+              phone: phone.trim(),
+              addressLine: `Street 1, ${city || 'Lahore'}`,
+              city: city || 'Lahore',
+              province: 'Punjab',
+              postalCode: '54000',
+              isDefault: true
+            }
+          ],
+          createdAt: user?.created_at ? new Date(user.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+        };
+
+        setRegisteredUsers((prev) => {
+          const exists = prev.some((u) => u.email.trim().toLowerCase() === cleanEmail);
+          return exists ? prev : [...prev, newUser];
+        });
+        setCurrentUser(newUser);
+        showToast(`Account created successfully! Welcome, ${newUser.name}.`);
+        return {
+          success: true,
+          message: 'Account created successfully!'
+        };
+      } catch (error) {
+        console.error('Supabase sign-up failed:', error);
+      }
+    }
+
+    const isAlreadyRegistered = registeredUsers.some((u) => u.email.trim().toLowerCase() === cleanEmail);
     if (isAlreadyRegistered) {
       return {
         success: false,
@@ -967,18 +1161,18 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     const newUser: User = {
       id: `c-${Date.now()}`,
-      name: name.trim(),
+      name: trimmedName,
       email: cleanEmail,
-      password: password || 'password123',
+      password: finalPassword,
       phone: phone.trim(),
       role: 'customer',
       addresses: [
         {
           id: `addr-${Date.now()}`,
-          fullName: name.trim(),
+          fullName: trimmedName,
           phone: phone.trim(),
-          addressLine: `Street 1, ${city}`,
-          city,
+          addressLine: `Street 1, ${city || 'Lahore'}`,
+          city: city || 'Lahore',
           province: 'Punjab',
           postalCode: '54000',
           isDefault: true
@@ -996,7 +1190,83 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   };
 
-  const logoutUser = () => {
+  const resetPassword = async (email: string, newPassword?: string): Promise<{ success: boolean; message: string }> => {
+    const cleanEmail = email.trim().toLowerCase();
+    const trimmedPassword = newPassword?.trim();
+
+    if (!cleanEmail) {
+      return {
+        success: false,
+        message: 'Please enter your email address.'
+      };
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: `${window.location.origin}/reset-password`
+        });
+
+        if (error) {
+          return { success: false, message: error.message || 'Unable to reset password right now.' };
+        }
+
+        showToast('Password reset email sent. Please check your inbox.');
+        return {
+          success: true,
+          message: 'Password reset email sent. Please check your inbox and follow the link.'
+        };
+      } catch (error) {
+        console.error('Supabase password reset failed:', error);
+      }
+    }
+
+    return {
+      success: false,
+      message: 'Password reset email is not configured yet. Add your Supabase credentials in the .env file and enable Email auth in the Supabase dashboard to receive reset emails.'
+    };
+
+    if (!trimmedPassword || trimmedPassword.length < 6) {
+      return {
+        success: false,
+        message: 'New password must be at least 6 characters long.'
+      };
+    }
+
+    const user = registeredUsers.find((u) => u.email.trim().toLowerCase() === cleanEmail);
+    if (!user) {
+      return {
+        success: false,
+        message: 'No account found for this email. Please create an account first.'
+      };
+    }
+
+    setRegisteredUsers((prev) =>
+      prev.map((u) =>
+        u.email.trim().toLowerCase() === cleanEmail ? { ...u, password: trimmedPassword } : u
+      )
+    );
+
+    if (currentUser && currentUser.email.trim().toLowerCase() === cleanEmail) {
+      setCurrentUser((prev) => (prev ? { ...prev, password: trimmedPassword } : prev));
+    }
+
+    showToast('Password reset successfully. Please sign in with your new password.');
+    return {
+      success: true,
+      message: 'Password reset successful. Please sign in again.'
+    };
+  };
+
+  const logoutUser = async () => {
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.auth.signOut();
+      } catch (error) {
+        console.error('Supabase sign-out failed:', error);
+      }
+    }
+
     setCurrentUser(null);
     showToast('Signed out of account');
   };
@@ -1037,6 +1307,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         toggleWishlist,
         isInWishlist,
         placeOrder,
+        updateOrderPaymentStatus,
         updateSellerOrderStatus,
         submitSellerApplication,
         approveSeller,
@@ -1062,6 +1333,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         toggleCouponActive,
         loginUser,
         registerUser,
+        resetPassword,
         logoutUser,
         toastMessage,
         showToast

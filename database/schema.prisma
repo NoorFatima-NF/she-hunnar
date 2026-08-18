@@ -1,0 +1,524 @@
+// ==============================================================================
+// SHE HUNNAR - PRISMA ORM SCHEMA (PostgreSQL / MySQL / SQLite compatible)
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  customer
+  seller
+  admin
+}
+
+enum VerificationStatus {
+  pending
+  approved
+  rejected
+  suspended
+}
+
+enum SellerType {
+  individual
+  business
+}
+
+enum ProductStatus {
+  draft
+  pending
+  published
+  rejected
+  out_of_stock
+}
+
+enum OrderStatus {
+  Pending
+  Confirmed
+  Processing
+  Ready_to_Ship
+  Shipped
+  Out_for_Delivery
+  Delivered
+  Cancelled
+  Return_Requested
+  Returned
+  Refunded
+}
+
+enum PaymentMethod {
+  COD
+  Bank_Transfer
+  Easypaisa
+  JazzCash
+  Online_Card
+}
+
+enum PaymentStatus {
+  Pending
+  Paid
+  Failed
+  Refunded
+}
+
+enum DiscountType {
+  percentage
+  fixed
+}
+
+enum PayoutStatus {
+  Pending
+  Approved
+  Paid
+}
+
+enum CustomRequestStatus {
+  Submitted
+  In_Review
+  Quoted
+  In_Production
+  Completed
+}
+
+// -------------------------------------------------------------
+// 1. Users & Addresses
+// -------------------------------------------------------------
+
+model User {
+  id            String          @id @default(uuid())
+  name          String
+  email         String          @unique
+  passwordHash  String?
+  phone         String?
+  role          UserRole        @default(customer)
+  avatarUrl     String?
+  googleId      String?
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  addresses     Address[]
+  sellerProfile SellerProfile?
+  masterOrders  MasterOrder[]
+  cartItems     CartItem[]
+  wishlist      WishlistItem[]
+  reviews       ProductReview[]
+  conversations Conversation[]
+  sentMessages  Message[]
+  notifications Notification[]
+  returns       ReturnRequest[]
+  customRequests CustomJewelryRequest[]
+}
+
+model Address {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName    String
+  phone       String
+  addressLine String
+  city        String
+  province    String
+  postalCode  String
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+// -------------------------------------------------------------
+// 2. Seller Studio Profiles
+// -------------------------------------------------------------
+
+model SellerProfile {
+  id                      String             @id @default(uuid())
+  userId                  String             @unique
+  user                    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopName                String
+  slug                    String             @unique
+  specialization          String
+  about                   String?
+  location                String?
+  logoUrl                 String?
+  bannerUrl               String?
+  rating                  Decimal            @default(5.00) @db.Decimal(3, 2)
+  reviewCount             Int                @default(0)
+  productCount            Int                @default(0)
+  completedOrders         Int                @default(0)
+  verificationStatus      VerificationStatus @default(pending)
+  verificationDocsUploaded Boolean           @default(false)
+  sellerType              SellerType         @default(individual)
+  cnicNumber              String?
+  cnicName                String?
+  cnicFrontUrl            String?
+  cnicBackUrl             String?
+  bankTitle               String?
+  pickupAddress           String?
+  commissionRate          Decimal            @default(10.00) @db.Decimal(5, 2)
+  shippingFee             Decimal            @default(200.00) @db.Decimal(10, 2)
+  freeShippingThreshold   Decimal?           @db.Decimal(10, 2)
+  payoutMethod            String             @default("Bank Transfer")
+  accountDetails          String?
+  instagramUrl            String?
+  facebookUrl             String?
+  whatsappNumber          String?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  products                Product[]
+  sellerOrders            SellerOrder[]
+  coupons                 Coupon[]
+  conversations           Conversation[]
+  notifications           Notification[]
+  payouts                 SellerPayout[]
+  returnRequests          ReturnRequest[]
+  customRequests          CustomJewelryRequest[]
+}
+
+// -------------------------------------------------------------
+// 3. Products & Categories
+// -------------------------------------------------------------
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  imageUrl    String?
+  displayOrder Int      @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  products    Product[]
+}
+
+model Product {
+  id                 String           @id @default(uuid())
+  sellerId           String
+  seller             SellerProfile    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  categoryId         String?
+  category           Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryName       String
+  title              String
+  slug               String           @unique
+  material           String
+  metalType          String?
+  stoneType          String?
+  color              String?
+  occasion           String?
+  shortDescription   String?
+  fullDescription    String?
+  price              Decimal          @db.Decimal(10, 2)
+  originalPrice      Decimal?         @db.Decimal(10, 2)
+  stock              Int              @default(1)
+  sku                String           @unique
+  images             String[]
+  videoUrl           String?
+  rating             Decimal          @default(5.00) @db.Decimal(3, 2)
+  reviewCount        Int              @default(0)
+  salesCount         Int              @default(0)
+  isNew              Boolean          @default(true)
+  isBestseller       Boolean          @default(false)
+  isFeatured         Boolean          @default(false)
+  isCustomizable     Boolean          @default(false)
+  productionTimeDays Int              @default(3)
+  careInstructions   String?
+  handmadeProcess    String?
+  status             ProductStatus    @default(published)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  variants           ProductVariant[]
+  customConfig       ProductCustomizationConfig?
+  cartItems          CartItem[]
+  wishlist           WishlistItem[]
+  orderItems         OrderItem[]
+  reviews            ProductReview[]
+  returnRequests     ReturnRequest[]
+}
+
+model ProductVariant {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String
+  price     Decimal  @db.Decimal(10, 2)
+  stock     Int      @default(0)
+  sku       String
+  createdAt DateTime @default(now())
+
+  cartItems CartItem[]
+}
+
+model ProductCustomizationConfig {
+  id                 String   @id @default(uuid())
+  productId          String   @unique
+  product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  allowText          Boolean  @default(false)
+  textLabel          String?
+  maxCharacters      Int      @default(20)
+  allowFontSelection Boolean  @default(false)
+  fonts              String[]
+  allowStoneSelection Boolean @default(false)
+  stones             String[]
+  allowReferenceUpload Boolean @default(false)
+  allowNote          Boolean  @default(false)
+  noteLabel          String?
+}
+
+// -------------------------------------------------------------
+// 4. Cart & Wishlist
+// -------------------------------------------------------------
+
+model CartItem {
+  id                String          @id @default(uuid())
+  userId            String?
+  user              User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionToken      String?
+  productId         String
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId         String?
+  variant           ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  quantity          Int             @default(1)
+  customizationData Json?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+}
+
+model WishlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}
+
+// -------------------------------------------------------------
+// 5. Orders & Safepay Payments
+// -------------------------------------------------------------
+
+model MasterOrder {
+  id                   String        @id @default(uuid())
+  orderNumber          String        @unique
+  customerId           String?
+  customer             User?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName         String
+  customerEmail        String
+  customerPhone        String
+
+  shippingAddressLine  String
+  shippingCity         String
+  shippingProvince     String
+  shippingPostalCode   String
+
+  paymentMethod        PaymentMethod @default(COD)
+  paymentStatus        PaymentStatus @default(Pending)
+  paymentProofUrl      String?
+  safepayTracker       String?
+  safepaySignature     String?
+  transactionRef       String?
+  paymentVerifiedAt    DateTime?
+
+  totalItems           Int           @default(1)
+  subtotal             Decimal       @db.Decimal(10, 2)
+  discountAmount       Decimal       @default(0.00) @db.Decimal(10, 2)
+  totalShipping        Decimal       @default(0.00) @db.Decimal(10, 2)
+  grandTotal           Decimal       @db.Decimal(10, 2)
+  couponCode           String?
+
+  masterStatus         OrderStatus   @default(Pending)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  sellerOrders         SellerOrder[]
+  returnRequests       ReturnRequest[]
+}
+
+model SellerOrder {
+  id             String        @id @default(uuid())
+  subOrderNumber String        @unique
+  masterOrderId  String
+  masterOrder    MasterOrder   @relation(fields: [masterOrderId], references: [id], onDelete: Cascade)
+  sellerId       String
+  seller         SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+  subtotal       Decimal       @db.Decimal(10, 2)
+  shippingFee    Decimal       @default(0.00) @db.Decimal(10, 2)
+  totalAmount    Decimal       @db.Decimal(10, 2)
+  status         OrderStatus   @default(Pending)
+
+  courierName    String?
+  trackingNumber String?
+  trackingUrl    String?
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  items          OrderItem[]
+  returnRequests ReturnRequest[]
+}
+
+model OrderItem {
+  id                String      @id @default(uuid())
+  sellerOrderId     String
+  sellerOrder       SellerOrder @relation(fields: [sellerOrderId], references: [id], onDelete: Cascade)
+  productId         String?
+  product           Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productTitle      String
+  productImage      String
+  variantName       String?
+  price             Decimal     @db.Decimal(10, 2)
+  quantity          Int         @default(1)
+  customizationData Json?
+  createdAt         DateTime    @default(now())
+}
+
+// -------------------------------------------------------------
+// 6. Reviews & Coupons
+// -------------------------------------------------------------
+
+model ProductReview {
+  id               String   @id @default(uuid())
+  productId        String
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customerId       String?
+  customer         User?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName     String
+  rating           Int
+  reviewText       String
+  verifiedPurchase Boolean  @default(true)
+  images           String[]
+  sellerReply      String?
+  sellerReplyAt    DateTime?
+  createdAt        DateTime @default(now())
+}
+
+model Coupon {
+  id                 String        @id @default(uuid())
+  code               String        @unique
+  discountType       DiscountType  @default(percentage)
+  discountValue      Decimal       @db.Decimal(10, 2)
+  minSpend           Decimal       @default(0.00) @db.Decimal(10, 2)
+  maxDiscount        Decimal?      @db.Decimal(10, 2)
+  expiryDate         DateTime
+  isActive           Boolean       @default(true)
+  applicableSellerId String?
+  applicableSeller   SellerProfile? @relation(fields: [applicableSellerId], references: [id], onDelete: Cascade)
+  usageLimit         Int?
+  timesUsed          Int           @default(0)
+  createdAt          DateTime      @default(now())
+}
+
+// -------------------------------------------------------------
+// 7. Messaging, Notifications & Support
+// -------------------------------------------------------------
+
+model Conversation {
+  id         String        @id @default(uuid())
+  customerId String
+  customer   User          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  sellerId   String
+  seller     SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  messages   Message[]
+
+  @@unique([customerId, sellerId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  senderRole     UserRole
+  text           String
+  attachmentUrl  String?
+  isRead         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+}
+
+model Notification {
+  id             String         @id @default(uuid())
+  targetRole     UserRole
+  targetUserId   String?
+  targetUser     User?          @relation(fields: [targetUserId], references: [id], onDelete: Cascade)
+  targetSellerId String?
+  targetSeller   SellerProfile? @relation(fields: [targetSellerId], references: [id], onDelete: Cascade)
+  title          String
+  message        String
+  link           String?
+  isRead         Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+}
+
+model SellerPayout {
+  id             String        @id @default(uuid())
+  sellerId       String
+  seller         SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  amount         Decimal       @db.Decimal(10, 2)
+  period         String
+  status         PayoutStatus  @default(Pending)
+  payoutMethod   String
+  accountDetails String?
+  requestedAt    DateTime      @default(now())
+  paidAt         DateTime?
+}
+
+model ReturnRequest {
+  id            String        @id @default(uuid())
+  masterOrderId String
+  masterOrder   MasterOrder   @relation(fields: [masterOrderId], references: [id], onDelete: Cascade)
+  sellerOrderId String
+  sellerOrder   SellerOrder   @relation(fields: [sellerOrderId], references: [id], onDelete: Cascade)
+  sellerId      String
+  seller        SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  customerId    String
+  customer      User          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  reason        String
+  description   String
+  status        String        @default("Requested")
+  images        String[]
+  requestedAt   DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model CustomJewelryRequest {
+  id                 String              @id @default(uuid())
+  customerId         String?
+  customer           User?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName       String
+  customerEmail      String
+  customerPhone      String
+  jewelryType        String
+  budgetPkr          Decimal             @db.Decimal(10, 2)
+  preferredMaterial  String
+  description        String
+  referenceImages    String[]
+  preferredSellerId  String?
+  preferredSeller    SellerProfile?      @relation(fields: [preferredSellerId], references: [id], onDelete: SetNull)
+  status             CustomRequestStatus @default(Submitted)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+
+model PlatformSettings {
+  id                String   @id @default(uuid())
+  commissionRate    Decimal  @default(10.00) @db.Decimal(5, 2)
+  announcementText  String?  @default("Free nationwide shipping on orders over PKR 3,500! • Supporting female craft makers across Pakistan")
+  currency          String   @default("PKR")
+  minPayoutAmount   Decimal  @default(1000.00) @db.Decimal(10, 2)
+  supportEmail      String   @default("support@shehunnar.pk")
+  supportPhone      String   @default("+92 300 1234567")
+  updatedAt         DateTime @updatedAt
+}

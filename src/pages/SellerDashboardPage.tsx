@@ -34,11 +34,12 @@ export const SellerDashboardPage: React.FC<SellerDashboardPageProps> = ({ onNavi
     deleteProduct,
     updateSubOrderStatus,
     replyToReview,
-    reviews
+    reviews,
+    activeSellerShopId
   } = useMarketplace();
 
-  // Pick seller profile (default to Noor Jewelry Studio for testing)
-  const seller = sellers[0];
+  // Pick the currently active seller's shop (the one who just registered or is logged in)
+  const seller = sellers.find((s) => s.id === activeSellerShopId) || sellers[0];
 
   const sellerProducts = products.filter((p) => p.sellerId === seller.id);
 
@@ -70,9 +71,7 @@ export const SellerDashboardPage: React.FC<SellerDashboardPageProps> = ({ onNavi
   const [shortDesc, setShortDesc] = useState('');
   const [fullDesc, setFullDesc] = useState('');
   const [isCustomizable, setIsCustomizable] = useState(true);
-  const [imageUrl, setImageUrl] = useState(
-    'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=800&q=80'
-  );
+  const [imageUrl, setImageUrl] = useState('');
 
   // Tracking Modal State
   const [selectedSubOrderId, setSelectedSubOrderId] = useState<string | null>(null);
@@ -134,22 +133,55 @@ export const SellerDashboardPage: React.FC<SellerDashboardPageProps> = ({ onNavi
     .filter((s) => s.sub.status === 'Delivered' || s.sub.status === 'Shipped')
     .reduce((acc, s) => acc + (s.sub.totalAmount || s.sub.total || 0) * 0.9, 0); // 90% payout after 10% commission
 
+  // Guard: if no seller profile found at all
+  if (!seller) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-24 text-center space-y-6">
+        <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+          <Store size={36} className="text-amber-800" />
+        </div>
+        <h2 className="font-serif text-2xl font-bold text-stone-900">No Seller Shop Found</h2>
+        <p className="text-stone-500 text-sm max-w-sm mx-auto">
+          You haven't created a shop yet. Register as a seller to start listing your handmade jewelry and crafts!
+        </p>
+        <button
+          onClick={() => onNavigate('become-a-seller')}
+          className="px-8 py-3.5 bg-amber-900 hover:bg-amber-950 text-white font-bold rounded-xl text-sm transition-all shadow-md active:scale-95"
+        >
+          Open Your Shop →
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Top Seller Banner */}
       <div className="bg-stone-900 text-stone-100 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-md">
         <div className="flex items-center gap-4">
-          <img
-            src={seller.logo}
-            alt={seller.shopName}
-            className="w-16 h-16 rounded-full border-2 border-stone-700 object-cover shrink-0"
-          />
+          <div className="w-16 h-16 rounded-full border-2 border-stone-700 object-cover shrink-0 bg-amber-800 flex items-center justify-center overflow-hidden">
+            {seller.logo ? (
+              <img src={seller.logo} alt={seller.shopName} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-2xl font-bold text-white">{seller.shopName.charAt(0)}</span>
+            )}
+          </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="font-serif text-2xl font-bold">{seller.shopName}</h1>
               <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-400/20 text-amber-300 px-2.5 py-0.5 rounded-full">
                 Craft Studio
               </span>
+              {seller.verificationStatus === 'pending' && (
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-yellow-400/20 text-yellow-300 px-2.5 py-0.5 rounded-full border border-yellow-500/30">
+                  ⏳ Verification Pending
+                </span>
+              )}
+              {seller.verificationStatus === 'approved' && (
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-400/20 text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                  ✓ Verified Seller
+                </span>
+              )}
             </div>
             <p className="text-xs text-stone-400 mt-0.5">
               {seller.specialization} • {seller.location}
@@ -505,13 +537,40 @@ export const SellerDashboardPage: React.FC<SellerDashboardPageProps> = ({ onNavi
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-stone-800">Image URL</label>
+                <label className="font-bold text-stone-800">Product Image *</label>
+                <div className="h-28 bg-stone-50 rounded-xl border border-dashed border-stone-300 overflow-hidden flex items-center justify-center">
+                  {imageUrl ? (
+                    <div className="relative w-full h-full">
+                      <img src={imageUrl} alt="preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setImageUrl('')}
+                        className="absolute top-1 right-1 bg-stone-900/70 text-white rounded-full p-0.5 hover:bg-rose-600 transition-colors"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label htmlFor="product-img-input" className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-stone-400 hover:text-amber-800 transition-colors">
+                      <Plus size={22} className="mb-1" />
+                      <span className="text-[11px] font-bold text-stone-600">Click to upload product image</span>
+                      <span className="text-[9px] text-stone-400">JPG, PNG, WebP up to 5MB</span>
+                    </label>
+                  )}
+                </div>
                 <input
-                  type="url"
-                  required
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl p-2.5"
+                  id="product-img-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => setImageUrl(reader.result as string);
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="hidden"
                 />
               </div>
 

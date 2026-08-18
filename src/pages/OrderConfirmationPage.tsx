@@ -55,18 +55,45 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
 
       {/* Summary Details */}
       <div className="bg-white rounded-3xl border border-stone-200 p-6 sm:p-8 space-y-6 shadow-xs">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-6 border-b border-stone-200 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pb-6 border-b border-stone-200 text-xs">
           <div>
             <span className="text-stone-400 block uppercase font-bold text-[10px]">Date Placed</span>
             <span className="font-semibold text-stone-900">{order.createdAt}</span>
           </div>
           <div>
             <span className="text-stone-400 block uppercase font-bold text-[10px]">Payment Method</span>
-            <span className="font-semibold text-stone-900">{order.paymentMethod}</span>
+            <div className="flex items-center gap-1 font-semibold text-stone-900">
+              {order.paymentMethod === 'Online Card' && <ShieldCheck size={14} className="text-emerald-700" />}
+              <span>{order.paymentMethod === 'Online Card' ? 'Safepay Online Card' : order.paymentMethod}</span>
+            </div>
+            {order.paymentMethod === 'Online Card' && (
+              <span className="inline-block mt-0.5 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                {order.paymentStatus === 'Paid' ? '✓ Verified by Safepay' : 'Sandbox 3D-Secure'}
+              </span>
+            )}
+          </div>
+          <div>
+            <span className="text-stone-400 block uppercase font-bold text-[10px]">Payment Status</span>
+            <span
+              className={`font-bold inline-block px-2 py-0.5 rounded text-[11px] ${
+                order.paymentStatus === 'Paid'
+                  ? 'bg-emerald-100 text-emerald-900'
+                  : 'bg-amber-100 text-amber-900'
+              }`}
+            >
+              {order.paymentStatus === 'Paid' ? 'Paid & Confirmed' : order.paymentStatus || 'Pending'}
+            </span>
+            {(order.safepayTracker || order.transactionRef) && (
+              <span className="block text-[10px] font-mono text-stone-400 mt-1 truncate" title={order.safepayTracker || order.transactionRef}>
+                Ref: {(order.safepayTracker || order.transactionRef)?.slice(0, 16)}...
+              </span>
+            )}
           </div>
           <div>
             <span className="text-stone-400 block uppercase font-bold text-[10px]">Delivery Address</span>
-            <span className="font-semibold text-stone-900">{order.addressLine || order.shippingAddress?.addressLine}, {order.city || order.shippingAddress?.city}</span>
+            <span className="font-semibold text-stone-900">
+              {order.addressLine || order.shippingAddress?.addressLine}, {order.city || order.shippingAddress?.city}
+            </span>
           </div>
         </div>
 
